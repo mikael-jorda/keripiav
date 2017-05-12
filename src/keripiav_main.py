@@ -94,13 +94,29 @@ while(cap.isOpened()):
     lines_tmp = cv2.HoughLinesP(edges,1,np.pi/180,nImtersectionPoints,0,minLineLength,maxLineGap)
     # print lines_tmp
     lines = np.squeeze(lines_tmp)
-    leftmost_vertical_line = ((cropped_size[1],0),(cropped_size[1],1))
-    rightmost_vertival_line = ((0,0),(0,1))
+    leftmost_vertical_line = [cropped_size[1],0,cropped_size[1],1]
+    rightmost_vertical_line = [0,0,0,1]
+    bottom_line = [0,0,1,0]
     for x1,y1,x2,y2 in lines:
         # print x1, " ", y1, " ", x2, " ", y2
-        # if(helper.isVerticalLine(x1,y1,x2,y2)):
-        cv2.line(src,(x1,y1),(x2,y2),np.array([0, 0, 255]),3)
+        if(helper.isVerticalLine(x1,y1,x2,y2)):
+            # print "left line : ", leftmost_vertical_line, "\ncurrent line : ", [x1,y1,x2,y2] 
+            leftmost_vertical_line = helper.resultingVerticalLeftLine(leftmost_vertical_line,[x1,y1,x2,y2])
+            rightmost_vertical_line = helper.resultingVerticalRightLine(rightmost_vertical_line,[x1,y1,x2,y2])
+        else:
+            bottom_line = helper.resultingHorizontalBottomLine(bottom_line,[x1,y1,x2,y2])
+            # print "left line : ", leftmost_vertical_line, "\n\n\n" 
+        # cv2.line(src,(x1,y1),(x2,y2),np.array([0, 0, 255]),3)
+        # cv2.line(src,(leftmost_vertical_line[0],leftmost_vertical_line[1]),(leftmost_vertical_line[2],leftmost_vertical_line[3]),np.array([0, 255, 0]),3)
 
+        # cv2.imshow(window_name,src)
+        # # wait for a key press, and exit if Esc is pressed
+        # if cv2.waitKey() & 0xFF == 27 :
+        #     break
+
+    cv2.line(src,(leftmost_vertical_line[0],leftmost_vertical_line[1]),(leftmost_vertical_line[2],leftmost_vertical_line[3]),np.array([0, 255, 0]),3)
+    cv2.line(src,(rightmost_vertical_line[0],rightmost_vertical_line[1]),(rightmost_vertical_line[2],rightmost_vertical_line[3]),np.array([0, 255, 0]),3)
+    cv2.line(src,(bottom_line[0],bottom_line[1]),(bottom_line[2],bottom_line[3]),np.array([0, 255, 0]),3)
     cv2.imshow(window_name,src)
     # wait for a key press, and exit if Esc is pressed
     if cv2.waitKey() & 0xFF == 27 :
