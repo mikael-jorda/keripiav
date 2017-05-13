@@ -3,6 +3,10 @@ import numpy as np
 import cv2
 import keripiav_helper_functions as helper
 
+def imshow(img, scale_down=1):
+    cv2.imshow("image", cv2.resize(img, (img.shape[1] / scale_down, img.shape[0] / scale_down)).astype(np.uint8))
+    cv2.waitKey(0)
+
 '''
 points1: (x y 1) [n x 3]
 points2: (x' y' 1) [n x 3]
@@ -14,6 +18,23 @@ def perspective_transformation(points1, points2):
     # [ 1  ]   [ g h i ] [ 1 ]
     assert(points1.shape[1] == 3 and points2.shape[1] == 3)
     assert(all(points1[:,2] == 1) and all(points2[:,2] == 1))
+
+    # Find centroids of corner points
+    centroid1 = np.mean(points1, axis=0)
+    centroid2 = np.mean(points2, axis=0)
+
+    # Find translations to move centroids to origin
+    T_1_to_center = np.eye(3)
+    T_1_to_center[:2,2] = -centroid1[:2]
+    T_center_to_1 = np.linalg.inv(T_1_to_center)
+
+    T_2_to_center = np.eye(3)
+    T_2_to_center[:2,2] = -centroid2[:2]
+    T_center_to_2 = np.linalg.inv(T_2_to_center)
+
+    # Translate points around centroid
+    points1 = points1.dot(T_1_to_center.T)
+    points2 = points2.dot(T_2_to_center.T)
 
     # Flattened system of equations
     # [ x y 1 0 0 0 -xx' -yx' -x' ] * [ a b c d e f g h i ]' = [ 0 ]
@@ -28,11 +49,11 @@ def perspective_transformation(points1, points2):
 
     # Collect terms into matrix
     T = np.reshape(x, (3,3))
-    return T
 
-def imshow(img, scale_down=1):
-    cv2.imshow("image", cv2.resize(img, (img.shape[1] / scale, img.shape[0] / scale)).astype(np.uint8))
-    cv2.waitKey(0)
+    # Find perspective transformation from image points to virtual points
+    T_1_to_2 = T_center_to_2.dot(T).dot(T_1_to_center)
+
+    return T_1_to_2
 
 if __name__ == "__main__":
     # Four test keyboard corner points in image: UL, UR, BR, BL
@@ -54,26 +75,10 @@ if __name__ == "__main__":
         cv2.circle(img2, tuple(points_img[i,:2].astype(np.int32)), 10, (0,255,0), 5)
     imshow(img2, 3)
 
-    # Find centroids of corner points
-    points_img_centroid = np.mean(points_img, axis=0)
-    points_virtual_centroid = np.mean(points_virtual, axis=0)
-
-    # Find translations to move centroids to origin
-    T_img_to_center = np.eye(3)
-    T_img_to_center[:2,2] = -points_img_centroid[:2]
-    T_center_to_img = np.linalg.inv(T_img_to_center)
-
-    T_virtual_to_center = np.eye(3)
-    T_virtual_to_center[:2,2] = -points_virtual_centroid[:2]
-    T_center_to_virtual = np.linalg.inv(T_virtual_to_center)
-
-    # Translate points around centroid
-    points_img_center = points_img.dot(T_img_to_center.T)
-    points_virtual_center = points_virtual.dot(T_virtual_to_center.T)
-
-    # Find perspective transformation from image points to virtual points
-    T_img_to_virtual = perspective_transformation(points_img_center, points_virtual_center)
-    T_img_to_virtual = T_center_to_virtual.dot(T_img_to_virtual).dot(T_img_to_center)
+    # Find projection matrix
+    T_img_to_virtual = perspective_transformation(points_img, points_virtual)
+    print("T_img_to_virtual:")
+    print(T_img_to_virtual)
 
     # Find keyboard pixels
     mask_keyboard = np.zeros(img.shape[:2])
