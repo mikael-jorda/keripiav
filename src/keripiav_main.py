@@ -31,14 +31,21 @@ cropped_size = (cropped_end[0]-cropped_origin[0],cropped_end[1]-cropped_origin[1
 cropped_height = cropped_size[0]
 cropped_width = cropped_size[1]
 
-# TODO : find a baseline
+# TODO : find a baseline online
+for i in range(20):
+    ret, frame = cap.read()
 
+baseline = frame[cropped_origin[0]:cropped_end[0],cropped_origin[1]:cropped_end[1],:]
+cv2.imshow(window_name,baseline)
+cv2.waitKey()
+hsv_baseline = cv2.cvtColor(baseline, cv2.COLOR_BGR2HSV)
 
 # read the frames
 while(cap.isOpened()):
     # read the frame
     ret, frame = cap.read()
     frame = frame[cropped_origin[0]:cropped_end[0],cropped_origin[1]:cropped_end[1],:]
+    cframe = frame.copy()
 
     # cv2.imshow(window_name,frame)
     # # wait for a key press, and exit if Esc is pressed
@@ -117,17 +124,17 @@ while(cap.isOpened()):
     #     break
 
     # remove everything outside of the keyboard
-    poly1 = helper.findLeftPolygon(left_line, cropped_height, cropped_width)
-    poly2 = helper.findRightPolygon(right_line, cropped_height, cropped_width)
-    poly3 = helper.findBottomPolygon(bottom_line, cropped_height, cropped_width)
+    polyleft = helper.findLeftPolygon(left_line, cropped_height, cropped_width)
+    polyright = helper.findRightPolygon(right_line, cropped_height, cropped_width)
+    polybottom = helper.findBottomPolygon(bottom_line, cropped_height, cropped_width)
 
-    cv2.fillConvexPoly(src, poly1, np.array([0,0,0]))    
-    cv2.fillConvexPoly(src, poly2, np.array([0,0,0]))    
-    cv2.fillConvexPoly(src, poly3, np.array([0,0,0]))    
-    cv2.imshow(window_name,src)
-    # wait for a key press, and exit if Esc is pressed
-    if cv2.waitKey() & 0xFF == 27 :
-        break
+    cv2.fillConvexPoly(src, polyleft, np.array([0,0,0]))    
+    cv2.fillConvexPoly(src, polyright, np.array([0,0,0]))    
+    cv2.fillConvexPoly(src, polybottom, np.array([0,0,0]))    
+    # cv2.imshow(window_name,src)
+    # # wait for a key press, and exit if Esc is pressed
+    # if cv2.waitKey() & 0xFF == 27 :
+    #     break
 
     
     # find the edges and lines again
@@ -137,8 +144,8 @@ while(cap.isOpened()):
     # if cv2.waitKey() & 0xFF == 27 :
     #     break
 
-    nImtersectionPoints = 50
-    minLineLength = 20
+    nImtersectionPoints = 45
+    minLineLength = 10
     maxLineGap = 75
     lines_tmp = cv2.HoughLinesP(edges,1,np.pi/180,nImtersectionPoints,0,minLineLength,maxLineGap)
     lines = np.squeeze(lines_tmp)
@@ -148,6 +155,7 @@ while(cap.isOpened()):
         if(not helper.isVerticalLine(x1,y1,x2,y2)):
             top_line = helper.resultingHorizontalTopLine(top_line,[x1,y1,x2,y2])
 
+    polytop = helper.findTopPolygon(top_line, cropped_height, cropped_width)
     # cv2.line(src,(top_line[0],top_line[1]),(top_line[2],top_line[3]),np.array([0, 255, 0]),3)
 
     # cv2.imshow(window_name,src)
@@ -164,8 +172,38 @@ while(cap.isOpened()):
 
     cv2.imshow(window_name,frame)
     # wait for a key press, and exit if Esc is pressed
-    if cv2.waitKey() & 0xFF == 27 :
+    if cv2.waitKey(10) & 0xFF == 27 :
         break
+    
+    # Make image differences in hsv space
+    pos_diff = cv2.absdiff(baseline,cframe)
+    # neg_diff = cv2.absdiff(-cframe,-baseline)
+
+    diff_treshold_low = np.array([0,0,120])
+    diff_treshold_high = np.array([255,255,255])
+    pos_diff = cv2.cvtColor(pos_diff, cv2.COLOR_BGR2HSV)
+    pos_diff = cv2.inRange(pos_diff, diff_treshold_low, diff_treshold_high)
+    # neg_diff = cv2.cvtColor(neg_diff, cv2.COLOR_BGR2HSV)
+    # neg_diff = cv2.inRange(neg_diff, diff_treshold_low, diff_treshold_high)
+
+    cv2.fillConvexPoly(pos_diff, polyleft, np.array([0,0,0])) 
+    cv2.fillConvexPoly(pos_diff, polytop, np.array([0,0,0])) 
+    # cv2.fillConvexPoly(neg_diff, polyleft, np.array([0,0,0])) 
+
+    if(np.max(pos_diff) > 0):
+        print "positive difference"
+        cv2.imshow(window_name,pos_diff)
+        if cv2.waitKey() & 0xFF == 27 :
+            break
+
+    white_pixels = np.argwhere(pos_diff)
+
+    # if(np.max(neg_diff) > 0):
+        # print "negative difference"
+        # cv2.imshow(window_name,neg_diff)
+        # if cv2.waitKey() & 0xFF == 27 :
+            # break
+    
 
 
 cap.release()

@@ -335,6 +335,26 @@ def findBottomPolygon(line, img_height, img_width):
 		else:
 			print "\nWARNING : should not reach here in findBottomPolygon\n\n"
 
+def findTopPolygon(line, img_height, img_width):
+	if(isVerticalLineArray(line)):
+		print "\nWARNING : line not horizontal in findTopPolygon\n\n"
+	eq = lineEquationArray(line)
+	yleft = computeYOnLine(eq,0)
+	yright = computeYOnLine(eq, img_width)
+	p1 = np.array([0,yleft], np.int32)
+	p2 = np.array([img_width, yright], np.int32)
+	if(yleft > 0):
+		p0 = np.array([0,0], np.int32)
+		if(yright > 0):
+			p3 = np.array([img_width,0], np.int32)
+			return np.array([p0,p1,p2,p3])
+		return np.array([p0,p1,p2])
+	else:
+		if(yright > 0):
+			p3 = np.array([img_width,0])
+			return np.array([p1,p2,p3]) 
+		else:
+			print "\nWARNING : should not reach here in findTopPolygon\n\n"
 
 # find the corners of a polygon defined by 4 intersecting lines
 def findCorners(tl,bl,ll,rl):
