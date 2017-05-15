@@ -363,16 +363,16 @@ def findCorners(tl,bl,ll,rl):
 	eql = lineEquationArray(ll)
 	eqr = lineEquationArray(rl)
 
-	tlp = np.cross(eqt,eql)
-	p1 = np.array([tlp[0]/tlp[2],tlp[1]/tlp[2]], np.int32)
-
 	trp = np.cross(eqt,eqr)
-	p2 = np.array([trp[0]/trp[2],trp[1]/trp[2]], np.int32)
+	p1 = np.array([trp[0]/trp[2],trp[1]/trp[2]], np.int32)
 
 	brp = np.cross(eqb,eqr)
-	p3 = np.array([brp[0]/brp[2],brp[1]/brp[2]], np.int32)
+	p2 = np.array([brp[0]/brp[2],brp[1]/brp[2]], np.int32)
 	
 	blp = np.cross(eqb,eql)
-	p4 = np.array([blp[0]/blp[2],blp[1]/blp[2]], np.int32)
+	p3 = np.array([blp[0]/blp[2],blp[1]/blp[2]], np.int32)
+
+	tlp = np.cross(eqt,eql)
+	p4 = np.array([tlp[0]/tlp[2],tlp[1]/tlp[2]], np.int32)
 
 	return np.array([p1,p2,p3,p4])
