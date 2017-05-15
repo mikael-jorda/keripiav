@@ -219,7 +219,7 @@ def computeXOnLine(line_equation, y):
 
 # finds the polygon to the left of the vertical line given as argument in the image
 def findLeftPolygon(line, img_height, img_width):
-	if(!isVerticalLine(line)):
+	if(not isVerticalLineArray(line)):
 		print "\nWARNING : line not vertical in findLeftPolygon\n\n"
 	eq = lineEquationArray(line)
 	xtop = computeXOnLine(eq,0)
@@ -241,7 +241,7 @@ def findLeftPolygon(line, img_height, img_width):
 
 # finds the polygon to the right of the vertical line given as argument in the image
 def findRightPolygon(line, img_height, img_width):
-	if(!isVerticalLine(line)):
+	if(not isVerticalLineArray(line)):
 		print "\nWARNING : line not vertical in findRightPolygon\n\n"
 	eq = lineEquationArray(line)
 	xtop = computeXOnLine(eq,0)
@@ -262,7 +262,7 @@ def findRightPolygon(line, img_height, img_width):
 			print "\nWARNING : should not reach here in findRightPolygon\n\n"
 
 def findBottomPolygon(line, img_height, img_width):
-	if(isVerticalLine(line)):
+	if(isVerticalLineArray(line)):
 		print "\nWARNING : line not horizontal in findBottomPolygon\n\n"
 	eq = lineEquationArray(line)
 	yleft = computeYOnLine(eq,0)
@@ -282,6 +282,4 @@ def findBottomPolygon(line, img_height, img_width):
 		else:
 			print "\nWARNING : should not reach here in findBottomPolygon\n\n"
 
-
-def findCorners(img):
 
