@@ -356,6 +356,12 @@ def findTopPolygon(line, img_height, img_width):
 		else:
 			print "\nWARNING : should not reach here in findTopPolygon\n\n"
 
+def posDiff(baseline, image):
+	result = baseline-image
+	result[baseline < image] = 0
+	return result
+
+
 # find the corners of a polygon defined by 4 intersecting lines
 def findCorners(tl,bl,ll,rl):
 	eqt = lineEquationArray(tl)
