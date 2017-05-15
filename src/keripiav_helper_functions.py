@@ -170,6 +170,59 @@ def resultingHorizontalBottomLine(l1,l2):
 
 	return [int(resulting_left[0]),int(resulting_left[1]),int(resulting_right[0]),int(resulting_right[1])]
 
+# compute the line formed by the two bottommost points of the ends of the two lines given as arguments
+def resultingHorizontalTopLine(l1,l2):
+	# makes a left line out of the two left most points
+	if(isVerticalLine(l1[0],l1[1],l1[2],l1[3]) or isVerticalLine(l2[0],l2[1],l2[2],l2[3])):
+		print "\nWARNING : Not horizontal lines in resultingHorinzontalTopLine\n\n"
+		return
+	eq1 = horizontalLineEquation(l1[0],l1[1],l1[2],l1[3])
+	eq2 = horizontalLineEquation(l2[0],l2[1],l2[2],l2[3])
+	# order the points of the first line
+	if(l1[0] < l1[2]):
+		left_point_1 = (l1[0], l1[1])
+		right_point_1 = (l1[2],l1[3])
+	else:
+		left_point_1 = (l1[2], l1[3])
+		right_point_1 = (l1[0],l1[1])
+	# order the points of the second line
+	if(l2[0] < l2[2]):
+		left_point_2 = (l2[0], l2[1])
+		right_point_2 = (l2[2],l2[3])
+	else:
+		left_point_2 = (l2[2], l2[3])
+		right_point_2 = (l2[0],l2[1])
+
+	# find the resulting left point
+	if(left_point_1[0] < left_point_2[0]):
+		tmpy = computeYOnLine(eq2, left_point_1[0])
+		if(tmpy < left_point_1[1]):
+			resulting_left = (left_point_1[0], tmpy)
+		else:
+			resulting_left = left_point_1
+	else:
+		tmpy = computeYOnLine(eq1, left_point_2[0])
+		if(tmpy < left_point_2[1]):
+			resulting_left = (left_point_2[0],tmpy)
+		else:
+			resulting_left = left_point_2
+
+	# find the resulting right point
+	if(right_point_1[0] > right_point_2[0]):
+		tmpy = computeYOnLine(eq2, right_point_1[0])
+		if(tmpy < right_point_1[1]):
+			resulting_right = (right_point_1[0], tmpy)
+		else:
+			resulting_right = right_point_1
+	else:
+		tmpy = computeYOnLine(eq1, right_point_2[0])
+		if(tmpy < right_point_2[1]):
+			resulting_right = (right_point_2[0], tmpy)
+		else:
+			resulting_right = right_point_2
+
+	return [int(resulting_left[0]),int(resulting_left[1]),int(resulting_right[0]),int(resulting_right[1])]
+
 # return the line equation 
 def lineEquation(x1,y1,x2,y2):
 	if(isVerticalLine(x1,y1,x2,y2)):
@@ -283,3 +336,23 @@ def findBottomPolygon(line, img_height, img_width):
 			print "\nWARNING : should not reach here in findBottomPolygon\n\n"
 
 
+# find the corners of a polygon defined by 4 intersecting lines
+def findCorners(tl,bl,ll,rl):
+	eqt = lineEquationArray(tl)
+	eqb = lineEquationArray(bl)
+	eql = lineEquationArray(ll)
+	eqr = lineEquationArray(rl)
+
+	tlp = np.cross(eqt,eql)
+	p1 = np.array([tlp[0]/tlp[2],tlp[1]/tlp[2]], np.int32)
+
+	trp = np.cross(eqt,eqr)
+	p2 = np.array([trp[0]/trp[2],trp[1]/trp[2]], np.int32)
+
+	blp = np.cross(eqb,eql)
+	p3 = np.array([blp[0]/blp[2],blp[1]/blp[2]], np.int32)
+
+	brp = np.cross(eqb,eqr)
+	p4 = np.array([brp[0]/brp[2],brp[1]/brp[2]], np.int32)
+
+	return np.array([p1,p2,p3,p4])
