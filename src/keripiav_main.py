@@ -2,6 +2,8 @@
 import numpy as np
 import cv2
 import keripiav_helper_functions as helper
+import project_keyboard
+from project_keyboard import imshow
 
 # path to vidoe file
 folder = '../data/individual_keys/'
@@ -176,7 +178,8 @@ while(cap.isOpened()):
         break
     
     # Make image differences in hsv space
-    pos_diff = cv2.absdiff(baseline,cframe)
+    # pos_diff = cv2.absdiff(baseline,cframe)
+    pos_diff = helper.posDiff(baseline,cframe)
     # neg_diff = cv2.absdiff(-cframe,-baseline)
 
     diff_treshold_low = np.array([0,0,120])
@@ -190,13 +193,35 @@ while(cap.isOpened()):
     cv2.fillConvexPoly(pos_diff, polytop, np.array([0,0,0])) 
     # cv2.fillConvexPoly(neg_diff, polyleft, np.array([0,0,0])) 
 
-    if(np.max(pos_diff) > 0):
-        print "positive difference"
-        cv2.imshow(window_name,pos_diff)
-        if cv2.waitKey() & 0xFF == 27 :
-            break
+    # if(np.max(pos_diff) > 0):
+    #     print "positive difference"
+    #     cv2.imshow(window_name,pos_diff)
+    #     if cv2.waitKey() & 0xFF == 27 :
+    #         break
 
     white_pixels = np.argwhere(pos_diff)
+    white_pixels_homogeneous = np.ones((white_pixels.shape[0], 3))
+    white_pixels_homogeneous[:,0] = white_pixels[:,1]
+    white_pixels_homogeneous[:,1] = white_pixels[:,0]
+    white_pixels = white_pixels_homogeneous
+    # corners_homogeneous = corners
+    # corners_homogeneous[:,0] = corners[:,1]
+    # corners_homogeneous[:,1] = corners[:,0]
+    # corners = corners_homogeneous
+    if white_pixels.shape[0]:
+        for i in range(white_pixels.shape[0]):
+            cv2.circle(frame, tuple(white_pixels[i,:2].astype(np.int32)), 1, (0,255,0), 3)
+        # imshow(frame, 3)
+        img_virtual, T_img_to_virtual = project_keyboard.project_image(frame, corners)
+
+        # points_virtual = project_keyboard.virtual_keyboard_corners()
+        # T_img_to_virtual = project_keyboard.perspective_transformation(corners, points_virtual)
+        white_pixels_virtual = white_pixels.dot(T_img_to_virtual.T)
+        white_pixels_virtual /= white_pixels_virtual[:,-1,np.newaxis]
+        for i in range(white_pixels.shape[0]):
+            cv2.circle(img_virtual, tuple(white_pixels_virtual[i,:2].astype(np.int32)), 10, (255,0,0), 5)
+        imshow(img_virtual, wait=1)
+        key = project_keyboard.majority_key_label(white_pixels_virtual)
 
     # if(np.max(neg_diff) > 0):
         # print "negative difference"

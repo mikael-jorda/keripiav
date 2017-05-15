@@ -5,6 +5,7 @@ import cv2
 import keripiav_helper_functions as helper
 import os
 import math
+from collections import Counter
 
 # 23mm x 125mm white keys, 13.7mm x 80mm black keys
 # 52 white keys, 36 black keys
@@ -17,19 +18,35 @@ DIM_KEYBOARD = (NUM_WHITE_KEYS * DIM_WHITE_KEYS[0], DIM_WHITE_KEYS[1])
 '''
 Show image scaled down by scale_down factor and wait for key press
 '''
-def imshow(img, scale_down=1):
+def imshow(img, scale_down=1, wait=0):
     cv2.imshow("image", cv2.resize(img, (int(img.shape[1] / scale_down), int(img.shape[0] / scale_down))).astype(np.uint8))
-    cv2.waitKey(0)
+    cv2.waitKey(wait)
 
 '''
 Return key label from (x,y) pixel coordinates
 '''
 def key_label(pixel):
     letters = "ABCDEFG"
-    idx_octave = int(math.floor(pixel[0] / (7 * DIM_WHITE_KEYS[0]) + 5/7))
-    idx_letter = int((pixel[0] % (7 * DIM_WHITE_KEYS[0])) / DIM_WHITE_KEYS[0])
+    idx_octave = int(math.floor(pixel[1] / (7 * DIM_WHITE_KEYS[0]) + 5/7))
+    idx_letter = int((pixel[1] % (7 * DIM_WHITE_KEYS[0])) / DIM_WHITE_KEYS[0])
     key = "%s%d" % (letters[idx_letter], idx_octave)
     return key
+
+def majority_key_label(pixels):
+    keys = [key_label(pixel) for pixel in pixels]
+    counts = Counter()
+    for key in keys:
+        counts[key] += 1
+    print(counts)
+    return counts.most_common(1)[0][0]
+
+'''
+Define virtual keyboard corner points
+'''
+def virtual_keyboard_corners():
+    points_virtual = np.array([[0,0],[0,DIM_KEYBOARD[0]],[DIM_KEYBOARD[1],DIM_KEYBOARD[0]],[DIM_KEYBOARD[1],0]])
+    points_virtual = np.hstack((points_virtual, np.ones((4,1))))
+    return points_virtual
 
 '''
 Find perspective transformation from points1 to points2
@@ -41,6 +58,10 @@ def perspective_transformation(points1, points2):
     # [ x' ]   [ a b c ] [ x ]
     # [ y' ] = [ d e f ] [ y ]
     # [ 1  ]   [ g h i ] [ 1 ]
+    if points1.shape[1] == 2:
+        points1 = np.hstack((points1, np.ones((points1.shape[0],1))))
+    if points2.shape[1] == 2:
+        points2 = np.hstack((points2, np.ones((points2.shape[0],1))))
     assert(points1.shape[1] == 3 and points2.shape[1] == 3)
     assert(all(points1[:,2] == 1) and all(points2[:,2] == 1))
 
@@ -80,6 +101,40 @@ def perspective_transformation(points1, points2):
 
     return T_1_to_2
 
+def project_image(img, points_img):
+
+    # Define virtual keyboard corner points
+    points_virtual = virtual_keyboard_corners()
+
+    # Find projection matrix
+    T_img_to_virtual = perspective_transformation(points_img, points_virtual)
+    # print("T_img_to_virtual:")
+    # print(T_img_to_virtual)
+
+    # Find keyboard pixels
+    mask_keyboard = np.zeros(img.shape[:2])
+    cv2.fillConvexPoly(mask_keyboard, points_img[:,:2].astype(np.int32), (1,))
+    pixels_img = np.nonzero(mask_keyboard)
+    pixels_img = np.column_stack((pixels_img[1], pixels_img[0], np.ones(pixels_img[0].shape)))
+
+    # Project keyboard pixels into virtual space
+    pixels_virtual = pixels_img.dot(T_img_to_virtual.T)
+    pixels_virtual /= pixels_virtual[:,-1,np.newaxis]
+
+    # Trim pixels to be proper image indices
+    pixels_img = pixels_img.astype(np.int32)
+    pixels_virtual = pixels_virtual.astype(np.int32)
+    pixels_img = np.clip(pixels_img[:,:2], 0, np.array(img.shape)[1::-1] - 1)
+    pixels_virtual = np.clip(pixels_virtual[:,:2], 0, np.array(DIM_KEYBOARD)[1::-1] - 1)
+
+    # Construct projected image
+    img_virtual = np.zeros((DIM_KEYBOARD[1], DIM_KEYBOARD[0], 3))
+    img_virtual[pixels_virtual[:,0],pixels_virtual[:,1],:] = img[pixels_img[:,1],pixels_img[:,0],:]
+    for i in range(NUM_WHITE_KEYS):
+        cv2.line(img_virtual, (DIM_WHITE_KEYS[0] * i, 0), (DIM_WHITE_KEYS[0] * i, DIM_WHITE_KEYS[1]), (0,0,255), 1)
+
+    return img_virtual, T_img_to_virtual
+
 if __name__ == "__main__":
     # Define four keyboard corners in image: upper left, upper right, bottom right, bottom left
     # points_img = np.array([[35,1581],[721,588],[856,597],[341,1689]])
@@ -91,12 +146,14 @@ if __name__ == "__main__":
     points_img = np.hstack((points_img, np.ones((4,1))))
 
     # Load calibration data
-    npz_calibration = np.load(os.path.join("..", "data", "calibration", "galaxy_s7.mp4.npz"))
+    # npz_calibration = np.load(os.path.join("..", "data", "calibration", "galaxy_s7.mp4.npz"))
+    npz_calibration = np.load(os.path.join("..", "data", "calibration", "nexus5.mp4.npz"))
     camera_matrix = npz_calibration["camera_matrix"]
     dist_coefs = npz_calibration["dist_coefs"]
 
     # Load image
-    img = cv2.imread(os.path.join("..", "data", "image1.png"), cv2.IMREAD_COLOR)
+    # img = cv2.imread(os.path.join("..", "data", "image1.png"), cv2.IMREAD_COLOR)
+    img = cv2.imread(os.path.join("..", "data", "image2.png"), cv2.IMREAD_COLOR)
 
     # Undistort image and save
     h, w = img.shape[:2]
@@ -107,8 +164,7 @@ if __name__ == "__main__":
     cv2.imwrite(os.path.join("..", "data", "image1_calibrated.png"), img)
 
     # Define virtual keyboard corner points
-    points_virtual = np.array([[0,0],[0,DIM_KEYBOARD[0]],[DIM_KEYBOARD[1],DIM_KEYBOARD[0]],[DIM_KEYBOARD[1],0]])
-    points_virtual = np.hstack((points_virtual, np.ones((4,1))))
+    points_virtual = virtual_keyboard_corners()
 
     # Plot corners
     img2 = img.copy()
