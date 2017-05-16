@@ -355,6 +355,7 @@ def findTopPolygon(line, img_height, img_width):
 			return np.array([p1,p2,p3]) 
 		else:
 			print "\nWARNING : should not reach here in findTopPolygon\n\n"
+			return np.array([p1,p1,p1])
 
 def posDiff(baseline, image):
 	result = baseline-image
