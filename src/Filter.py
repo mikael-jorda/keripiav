@@ -7,22 +7,22 @@ class ButterworthFilter:
 	def __init__(self, sample_input, fc = 0.1, order = 2):
 		self.signal_dim = sample_input.shape
 		# self.signal_ndim = self.signal_dim.size
-		print "signal dimensions : ",  self.signal_dim
+		# print "signal dimensions : ",  self.signal_dim
 		t1 = [order+1] + [1 for x in self.signal_dim]
 		t2 = [order] + [1 for x in self.signal_dim]
 		self.past_input = np.tile(sample_input,tuple(t1))
 		self.past_output = np.tile(sample_input,tuple(t2))
-		print self.past_output
-		print self.past_input
+		# print self.past_output
+		# print self.past_input
 		self.order = order
 		self.fc = fc
 		self.computeCoeff(fc, order)
-		print self.output_coeffs
-		print self.input_coeffs
+		# print self.output_coeffs
+		# print self.input_coeffs
 
 	def computeCoeff(self, fc, order):
 		b, a = butter(order, fc*0.5, btype='low', analog=False)
-		print "output coeffs, input coeffs : ", a, b
+		# print "output coeffs, input coeffs : ", a, b
 		t1 = list(self.signal_dim) + [1]
 		self.output_coeffs = np.tile(a[1::],tuple(t1)).T.reshape(self.past_output.shape)
 		self.input_coeffs = np.tile(b,tuple(t1)).T.reshape(self.past_input.shape)

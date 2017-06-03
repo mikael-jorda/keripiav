@@ -5,10 +5,10 @@ import keripiav_helper_functions as helper
 import project_keyboard
 from project_keyboard import imshow
 
-# path to vidoe file
+# path to video file
 folder = '../data/individual_keys/'
 file = 'C4.mp4'
-path_to_vidoe_file = folder + file
+path_to_video_file = folder + file
 
 
 # TODO : load calibration parameters
@@ -20,7 +20,7 @@ cv2.namedWindow( window_name, cv2.WINDOW_NORMAL);
 cv2.resizeWindow(window_name, 400, 550);
 
 # create video capture object
-cap = cv2.VideoCapture(path_to_vidoe_file)
+cap = cv2.VideoCapture(path_to_video_file)
 
 if(not cap.isOpened()):
     print "error reading video\n"
