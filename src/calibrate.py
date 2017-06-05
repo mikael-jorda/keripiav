@@ -44,10 +44,10 @@ if __name__ == '__main__':
         if not ret:
             break
         idx_frame += 1
-        if idx_frame % 10 != 0:
+        if idx_frame % 30 != 0:
             continue
-        if idx_frame > 200:
-            break
+        #  if idx_frame > 200:
+        #      break
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         if img is None:
             print("Failed to load", fn)
