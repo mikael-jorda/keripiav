@@ -3,8 +3,10 @@ import numpy as np
 import cv2
 import keripiav_helper_functions as helper
 import project_keyboard
-from project_keyboard import imshow
+import corners
+from project_keyboard import imshow, homogenize, dehomogenize
 import Filter
+from collections import Counter
 
 # predictor class that, given a video, is able to predict which key is played in the frames.
 # It has a baseline to which we compare the images, it is able to compute the transform between the position 
@@ -17,11 +19,11 @@ class Predictor:
 	# Parameters 
 	# 	camera_side : the side of the camera (left or right)
 	# 	video_file : the path to the video file
-	def __init__(self, camera_side, video_file):
+	def __init__(self, video_file, camera_side=None):
 
 		# define all the parameters for the different cameras
 		if camera_side == 'right':
-			self.side = 'right'
+			self.pos_camera = 'right'
 			# threshold to detect the white and black pixels in hsv space
 			self.low_treshold_hsv_white = np.array([0,0,200])
 			self.high_treshold_hsv_white = np.array([255,35,255])
@@ -41,7 +43,7 @@ class Predictor:
 			self.maxLineGapSecond = 75
 			
 		elif camera_side == 'left':
-			self.side = 'left'
+			self.pos_camera = 'left'
 			# threshold to detect the white and black pixels in hsv space
 			self.low_treshold_hsv_white = np.array([0,0,200])
 			self.high_treshold_hsv_white = np.array([255,40,255])
@@ -60,28 +62,124 @@ class Predictor:
 			self.minLineLengthSecond = 10
 			self.maxLineGapSecond = 75
 
-		else:
-			print 'please chose \'left\' or \'right\' for the camera_side parameter\n'
-			quit()
-
-		self.window_name = 'Predictor_' + self.side
-		cv2.namedWindow( self.window_name, cv2.WINDOW_NORMAL);
-		cv2.resizeWindow(self.window_name, 400, 550);
+		# TODO: remove - camera side can be determined by findCorners
+		# else:
+		#     print 'please chose \'left\' or \'right\' for the camera_side parameter\n'
+		#     quit()
 
 		self.video_stream = cv2.VideoCapture(path_to_video_file)
 		if(not self.video_stream.isOpened()):
 			print "error reading video\n"
 			quit()
 
-		ret, frame = self.video_stream.read()
+		# ret, self.frame = self.video_stream.read()
 
-		self.getCroppedZone(frame)
-		self.baseline = frame[self.cropped_origin[0]:self.cropped_end[0], self.cropped_origin[1]:self.cropped_end[1]]
+		# self.getCroppedZone(frame)
+		# self.baseline = frame[self.cropped_origin[0]:self.cropped_end[0], self.cropped_origin[1]:self.cropped_end[1]]
+		self.pos_camera = None
+		self.advanceFrame(update_projection=True)
+		self.baseline = self.frame
+		self.baseline_hsv = cv2.cvtColor(self.baseline, cv2.COLOR_BGR2HSV)
 
-		corners = self.findCorners(self.baseline, True, True)
-		self.fp = Filter.ProximityFilter(corners, 100)
-		self.fb = Filter.ButterworthFilter(corners,0.1,2)
+		self.window_name = 'Predictor_' + self.pos_camera
+		cv2.namedWindow( self.window_name, cv2.WINDOW_NORMAL);
+		cv2.resizeWindow(self.window_name, 400, 550);
 
+		imshow(self.frame_marked, scale_down=3, window=self.window_name+"_baseline")
+
+		self.fp = Filter.ProximityFilter(self.corners, 100)
+		self.fb = Filter.ButterworthFilter(self.corners,0.1,2)
+
+		# TODO: tune diff thresholds
+		self.pos_diff_threshold_low = np.array([0,0,120])
+		self.pos_diff_threshold_high = np.array([255,255,255])
+		self.neg_diff_threshold_low = np.array([0,0,120])
+		self.neg_diff_threshold_high = np.array([255,255,255])
+	
+	def advanceFrame(self, update_projection=False, project_image=True):
+		ret, self.frame = self.video_stream.read()
+		if not ret:
+			return False
+		self.frame_marked = self.frame.copy()
+
+		if update_projection:
+			# Find corners
+			self.corners, self.pos_camera = corners.find_corners(self.frame_marked, self.pos_camera, mark_img=True, show_img=False)
+			# TODO: filter corners
+
+			# Find projection matrix and update key map/mask
+			self.T_img_to_virtual, self.T_virtual_to_img = project_keyboard.find_projection(self.corners)
+			self.key_map = project_keyboard.key_map(self.frame.shape, self.T_virtual_to_img, self.pos_camera)
+			self.key_mask = (self.key_map > 0)[:,:,np.newaxis]
+
+		# Project virtual image (only for visualization)
+		if project_image:
+			self.img_virtual = project_keyboard.project_image(self.frame, self.key_mask, self.T_img_to_virtual)
+
+		return True
+
+	def countKeyDiffs(self, show_img=False):
+		# Use HSV
+		frame_hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
+
+		# Find differences
+		pos_diff = (self.baseline_hsv.astype(np.int32) - frame_hsv.astype(np.int32)) * self.key_mask
+		neg_diff = (frame_hsv.astype(np.int32) - self.baseline_hsv.astype(np.int32)) * self.key_mask
+		pos_diff_v = pos_diff[:,:,2]
+		neg_diff_v = neg_diff[:,:,2]
+
+		# Clip negative differences in V channel
+		pos_diff_v[pos_diff_v < 0] = 0
+		neg_diff_v[neg_diff_v < 0] = 0
+
+		# Take abs of negative differences in H, S channels
+		pos_diff = np.abs(pos_diff).astype(np.uint8)
+		neg_diff = np.abs(neg_diff).astype(np.uint8)
+		pos_diff = cv2.inRange(pos_diff, self.pos_diff_threshold_low, self.pos_diff_threshold_high)
+		neg_diff = cv2.inRange(neg_diff, self.neg_diff_threshold_low, self.neg_diff_threshold_high)
+
+		# Find pixel coordinates
+		pixels_pos_diff = np.argwhere(pos_diff)[:,::-1]
+		pixels_neg_diff = np.argwhere(neg_diff)[:,::-1]
+
+		# Count detected keys for diff pixels
+		counts = Counter()
+
+		for pixel in pixels_pos_diff:
+			key = project_keyboard.key_label(self.key_map, pixel)
+			if key is None or project_keyboard.is_black(key):
+				continue
+			counts[key] += 1
+
+			# Plot positive differences
+			if show_img:
+				for i in range(pixels_pos_diff.shape[0]):
+					cv2.circle(self.frame_marked, tuple(pixels_pos_diff[i,:2].astype(np.int32)), 1, (0,255,0), 3)
+				pixels_pos_diff = homogenize(pixels_pos_diff)
+				pixels_pos_diff_virtual = dehomogenize(pixels_pos_diff.dot(self.T_img_to_virtual.T))[:,::-1]
+				for i in range(pixels_pos_diff_virtual.shape[0]):
+					cv2.circle(self.img_virtual, tuple(pixels_pos_diff_virtual[i,:2].astype(np.int32)), 1, (0,255,0), 3)
+
+		for pixel in pixels_neg_diff:
+			key = project_keyboard.key_label(self.key_map, pixel)
+			if key is None or project_keyboard.is_white(key):
+				continue
+			counts[key] += 1
+
+			# Plot negative differences
+			if show_img:
+				for i in range(pixels_neg_diff.shape[0]):
+					cv2.circle(self.frame_marked, tuple(pixels_neg_diff[i,:2].astype(np.int32)), 1, (0,0,255), 3)
+				pixels_neg_diff = homogenize(pixels_neg_diff)
+				pixels_neg_diff_virtual = dehomogenize(pixels_neg_diff.dot(self.T_img_to_virtual.T))[:,::-1]
+				for i in range(pixels_neg_diff_virtual.shape[0]):
+					cv2.circle(self.img_virtual, tuple(pixels_neg_diff_virtual[i,:2].astype(np.int32)), 1, (0,0,255), 3)
+
+		if show_img and counts:
+			imshow(self.frame_marked, scale_down=3, window=self.window_name, wait=1)
+			imshow(self.img_virtual, window=self.window_name+"_virtual", wait=1)
+
+		return counts
 
 	# manually select the zone of interest in the image
 	# TODO for manual selection on the image
@@ -248,8 +346,13 @@ if __name__ == "__main__":
 	# folder = '../data/Right_Mikael_camera/individual_keys/'
 	# file = 'C4m.mp4'
 	folder = '../data/Left_Toki_camera/individual_keys/'
-	file = 'C4t.mp4'
-	path_to_video_file = folder + file
+	filename = 'C4t.mp4'
+	path_to_video_file = folder + filename
 
-	# pright = Predictor('right', path_to_video_file)
-	pleft = Predictor('left', path_to_video_file)
+	# pright = Predictor(path_to_video_file)
+	pleft = Predictor(path_to_video_file)
+	while pleft.advanceFrame():
+		counts = pleft.countKeyDiffs(show_img=True)
+		print(counts)
+
+

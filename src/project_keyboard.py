@@ -45,9 +45,12 @@ def indexof(key):
     else:
         idx_letter = "CDEFGAB".index(key[0])
         idx_key = 7 * idx_octave + idx_letter - 5
-    return idx_key
+    return idx_key + 1
 
 def key(idx_key):
+    idx_key -= 1
+    if idx_key < 0:
+        return None
     if idx_key < NUM_WHITE_KEYS:
         idx_key += 5
         idx_octave = int(idx_key / 7)
@@ -60,20 +63,52 @@ def key(idx_key):
         key = "%sb%d" % ("DEGAB"[idx_letter], idx_octave)
     return key
 
-def key_map(dim, T_virtual3d_to_img, pos_camera="left"):
-    img = np.zeros(dim[:2], dtype=np.uint8)
-    T_virtual_to_img = np.column_stack((T_virtual3d_to_img[:,:2], T_virtual3d_to_img[:,-1]))
-    if pos_camera == "left":
+def sharp(key):
+    if key[1] == "b":
+        idx_letter = "CDEFGAB".index(key[0])
+        key = "CDEFGAB"[idx_letter-1] + "#" + key[-1]
+    return key
+
+def flat(key):
+    if key[1] == "#":
+        idx_letter = "CDEFGAB".index(key[0])
+        key = "CDEFGAB"[idx_letter+1] + "b" + key[-1]
+    return key
+
+def key_map(img_shape, T_virtual_to_img, pos_camera="left"):
+    img = np.zeros(img_shape[:2], dtype=np.uint8)
+    if T_virtual_to_img.shape[1] == 4:
+        # 3d black key projection
+        T_virtual2d_to_img = np.column_stack((T_virtual_to_img[:,:2], T_virtual_to_img[:,-1]))
+        for key in white_keys():
+            bbox_white_virtual = homogenize(bounding_box(key))
+            bbox_white_img = np.round(dehomogenize(bbox_white_virtual.dot(T_virtual2d_to_img.T))).astype(np.int32)
+            cv2.fillConvexPoly(img, bbox_white_img, indexof(key))
+
+        black_key_list = list(black_keys())
+        if pos_camera == "left":
+            black_key_list = reversed(black_key_list)
+        for key in black_key_list:
+            bbox_black_virtual3d = homogenize(bounding_box(key))
+            bbox_black_img = np.round(dehomogenize(bbox_black_virtual3d.dot(T_virtual_to_img.T))).astype(np.int32)
+            hull_black_img = np.squeeze(cv2.convexHull(bbox_black_img))
+            cv2.fillConvexPoly(img, hull_black_img, indexof(key))
+    else:
+        # 2d black key projection
         for key in white_keys():
             bbox_white_virtual = homogenize(bounding_box(key))
             bbox_white_img = np.round(dehomogenize(bbox_white_virtual.dot(T_virtual_to_img.T))).astype(np.int32)
             cv2.fillConvexPoly(img, bbox_white_img, indexof(key))
+        for key in black_keys():
+            if pos_camera == "left":
+                white_key = flat(key)[0] + key[-1]
+            else:
+                white_key = sharp(key)[0] + key[-1]
+            bbox_white_virtual = homogenize(bounding_box(white_key))
+            bbox_white_virtual[-2:,0] = DIM_BLACK_KEYS[2]
+            bbox_white_img = np.round(dehomogenize(bbox_white_virtual.dot(T_virtual_to_img.T))).astype(np.int32)
+            cv2.fillConvexPoly(img, bbox_white_img, indexof(key))
 
-        for key in reversed(list(black_keys())):
-            bbox_black_virtual3d = homogenize(bounding_box(key))
-            bbox_black_img = np.round(dehomogenize(bbox_black_virtual3d.dot(T_virtual3d_to_img.T))).astype(np.int32)
-            hull_black_img = np.squeeze(cv2.convexHull(bbox_black_img))
-            cv2.fillConvexPoly(img, hull_black_img, indexof(key))
     return img
 
 '''
@@ -81,7 +116,7 @@ Return key label from (x,y) pixel coordinates
 '''
 def key_label(key_map, pixel):
     pixel = np.round(pixel).astype(np.int32)
-    return indexof(key_map[pixel[1],pixel[0]])
+    return key(key_map[pixel[1],pixel[0]])
     # letters = "ABCDEFG"
     # idx_octave = int(math.floor(pixel[1] / (7 * DIM_WHITE_KEYS[0]) + 5/7))
     # idx_letter = int((pixel[1] % (7 * DIM_WHITE_KEYS[0])) / DIM_WHITE_KEYS[0])
@@ -131,6 +166,12 @@ def white_keys():
         for letter in letters:
             yield "%s%d" % (letter, octave)
     yield "C8"
+
+def is_black(key):
+    return key[1] == "b" or key[1] == "#"
+
+def is_white(key):
+    return not is_black(key)
 
 def majority_key_label(key_map, pixels):
     keys = [key_label(key_map, pixel) for pixel in pixels]
@@ -275,8 +316,7 @@ def perspective_transformation_3d(T_virtual_to_img, point_virtual, point_img):
     T_virtual3d_to_img = np.column_stack((T_virtual_to_img[:,:2], uvw, T_virtual_to_img[:,-1]))
     return T_virtual3d_to_img
 
-def project_image(img, points_img, points_virtual=None, dim=2):
-
+def find_projection(points_img, points_virtual=None, dim=2):
     # Define virtual keyboard corner points
     if points_virtual is None:
         points_virtual = virtual_keyboard_corners(dim)
@@ -287,12 +327,11 @@ def project_image(img, points_img, points_virtual=None, dim=2):
         T_img_to_virtual = np.linalg.inv(np.column_stack((T_virtual_to_img[:,:2], T_virtual_to_img[:,-1])))
     else:
         T_img_to_virtual = np.linalg.inv(T_virtual_to_img)
-    # print("T_img_to_virtual:")
-    # print(T_img_to_virtual)
 
+    return T_img_to_virtual, T_virtual_to_img
+
+def project_image(img, mask_keyboard, T_img_to_virtual):
     # Find keyboard pixels
-    mask_keyboard = np.zeros(img.shape[:2])
-    cv2.fillConvexPoly(mask_keyboard, points_img[:,:2].astype(np.int32), (1,))
     pixels_img = np.nonzero(mask_keyboard)
     pixels_img = np.column_stack((pixels_img[1], pixels_img[0], np.ones(pixels_img[0].shape)))
 
@@ -312,7 +351,7 @@ def project_image(img, points_img, points_virtual=None, dim=2):
     for i in range(NUM_WHITE_KEYS):
         cv2.line(img_virtual, (DIM_WHITE_KEYS[0] * i, 0), (DIM_WHITE_KEYS[0] * i, DIM_WHITE_KEYS[1]), (0,0,255), 1)
 
-    return img_virtual, T_img_to_virtual, T_virtual_to_img
+    return img_virtual
 
 if __name__ == "__main__":
     # Define four keyboard corners in image: upper left, upper right, bottom right, bottom left
