@@ -7,6 +7,7 @@ import corners
 from project_keyboard import imshow, homogenize, dehomogenize
 import Filter
 from collections import Counter
+import os
 
 # predictor class that, given a video, is able to predict which key is played in the frames.
 # It has a baseline to which we compare the images, it is able to compute the transform between the position 
@@ -19,7 +20,7 @@ class Predictor:
 	# Parameters 
 	# 	camera_side : the side of the camera (left or right)
 	# 	video_file : the path to the video file
-	def __init__(self, video_file, camera_side=None):
+	def __init__(self, video_file, camera_side=None, calibration_file=None):
 
 		# define all the parameters for the different cameras
 		if camera_side == 'right':
@@ -62,6 +63,13 @@ class Predictor:
 			self.minLineLengthSecond = 10
 			self.maxLineGapSecond = 75
 
+		# Load calibration parameters
+		self.calibration = calibration_file
+		if self.calibration:
+			npz_calibration = np.load(self.calibration)
+			self.camera_matrix = npz_calibration["camera_matrix"]
+			self.dist_coefs = npz_calibration["dist_coefs"]
+
 		# TODO: remove - camera side can be determined by findCorners
 		# else:
 		#     print 'please chose \'left\' or \'right\' for the camera_side parameter\n'
@@ -100,6 +108,16 @@ class Predictor:
 		ret, self.frame = self.video_stream.read()
 		if not ret:
 			return False
+
+		# Undistort frame
+		if self.calibration:
+			h, w = self.frame.shape[:2]
+			newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self.camera_matrix, self.dist_coefs, (w, h), 1, (w, h))
+			self.frame = cv2.undistort(self.frame, self.camera_matrix, self.dist_coefs, None, newcameramtx)
+			x, y, w, h = roi
+			self.frame = self.frame[y:y+h,x:x+w]
+
+		# Create copy of frame for marking
 		self.frame_marked = self.frame.copy()
 
 		if update_projection:
@@ -145,37 +163,36 @@ class Predictor:
 		# Count detected keys for diff pixels
 		counts = Counter()
 
-		for pixel in pixels_pos_diff:
-			key = project_keyboard.key_label(self.key_map, pixel)
+		idx_pos_diff = np.zeros((pixels_pos_diff.shape[0],), np.bool)
+		for i in range(pixels_pos_diff.shape[0]):
+			key = project_keyboard.key_label(self.key_map, pixels_pos_diff[i])
 			if key is None or project_keyboard.is_black(key):
 				continue
 			counts[key] += 1
+			idx_pos_diff[i] = 1
 
-			# Plot positive differences
-			if show_img:
-				for i in range(pixels_pos_diff.shape[0]):
-					cv2.circle(self.frame_marked, tuple(pixels_pos_diff[i,:2].astype(np.int32)), 1, (0,255,0), 3)
-				pixels_pos_diff = homogenize(pixels_pos_diff)
-				pixels_pos_diff_virtual = dehomogenize(pixels_pos_diff.dot(self.T_img_to_virtual.T))[:,::-1]
-				for i in range(pixels_pos_diff_virtual.shape[0]):
-					cv2.circle(self.img_virtual, tuple(pixels_pos_diff_virtual[i,:2].astype(np.int32)), 1, (0,255,0), 3)
-
-		for pixel in pixels_neg_diff:
-			key = project_keyboard.key_label(self.key_map, pixel)
+		idx_neg_diff = np.zeros((pixels_neg_diff.shape[0],), np.bool)
+		for i in range(pixels_neg_diff.shape[0]):
+			key = project_keyboard.key_label(self.key_map, pixels_neg_diff[i])
 			if key is None or project_keyboard.is_white(key):
 				continue
 			counts[key] += 1
-
-			# Plot negative differences
-			if show_img:
-				for i in range(pixels_neg_diff.shape[0]):
-					cv2.circle(self.frame_marked, tuple(pixels_neg_diff[i,:2].astype(np.int32)), 1, (0,0,255), 3)
-				pixels_neg_diff = homogenize(pixels_neg_diff)
-				pixels_neg_diff_virtual = dehomogenize(pixels_neg_diff.dot(self.T_img_to_virtual.T))[:,::-1]
-				for i in range(pixels_neg_diff_virtual.shape[0]):
-					cv2.circle(self.img_virtual, tuple(pixels_neg_diff_virtual[i,:2].astype(np.int32)), 1, (0,0,255), 3)
+			idx_neg_diff[i] = 1
 
 		if show_img and counts:
+			pixels_pos_diff = homogenize(pixels_pos_diff[idx_pos_diff,:]).astype(np.int32)
+			pixels_neg_diff = homogenize(pixels_neg_diff[idx_neg_diff,:]).astype(np.int32)
+			self.frame_marked[pixels_pos_diff[:,1],pixels_pos_diff[:,0]] = np.array((0,255,0))
+			self.frame_marked[pixels_neg_diff[:,1],pixels_neg_diff[:,0]] = np.array((0,0,255))
+
+			pixels_pos_diff_virtual = dehomogenize(pixels_pos_diff.dot(self.T_img_to_virtual.T)).astype(np.int32)
+			pixels_neg_diff_virtual = dehomogenize(pixels_neg_diff.dot(self.T_img_to_virtual.T)).astype(np.int32)
+			pixels_pos_diff_virtual = np.clip(pixels_pos_diff_virtual, 0, np.array(self.img_virtual.shape[:2]) - 1)
+			pixels_neg_diff_virtual = np.clip(pixels_neg_diff_virtual, 0, np.array(self.img_virtual.shape[:2]) - 1)
+			self.img_virtual[pixels_pos_diff_virtual[:,0],pixels_pos_diff_virtual[:,1]] = np.array((0,255,0))
+			self.img_virtual[pixels_neg_diff_virtual[:,0],pixels_neg_diff_virtual[:,1]] = np.array((0,0,255))
+
+		if show_img:
 			imshow(self.frame_marked, scale_down=3, window=self.window_name, wait=1)
 			imshow(self.img_virtual, window=self.window_name+"_virtual", wait=1)
 
@@ -343,16 +360,26 @@ class Predictor:
 if __name__ == "__main__":
 
 	# path to video file
-	# folder = '../data/Right_Mikael_camera/individual_keys/'
-	# file = 'C4m.mp4'
-	folder = '../data/Left_Toki_camera/individual_keys/'
-	filename = 'C4t.mp4'
-	path_to_video_file = folder + filename
+	dir_data = os.path.join("..", "data", "Right_Mikael_camera")
+	dir_video = os.path.join(dir_data, "individual_keys")
+	file_video = "C4m.mp4"
+	file_calibration = "nexus5.mp4.npz"
 
-	# pright = Predictor(path_to_video_file)
-	pleft = Predictor(path_to_video_file)
+	# dir_data = os.path.join("..", "data", "Left_Toki_camera")
+	# dir_video = os.path.join(dir_data, "individual_keys")
+	# file_video = "C4t.mp4"
+	# file_calibration = "galaxy_s7-7.mp4.npz"
+
+	path_to_video_file = os.path.join(dir_video, file_video)
+	path_to_calibration_file = os.path.join(dir_data, file_calibration)
+
+	# pright = Predictor(path_to_video_file, calibration=path_to_calibration_file)
+	idx_frame = 0
+	pleft = Predictor(path_to_video_file, calibration_file=path_to_calibration_file)
 	while pleft.advanceFrame():
 		counts = pleft.countKeyDiffs(show_img=True)
-		print(counts)
+		idx_frame += 1
+		if counts:
+			print(idx_frame, counts)
 
 

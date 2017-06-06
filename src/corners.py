@@ -242,17 +242,17 @@ def find_corners(img, pos_camera=None, mark_img=True, show_img=False, img_white_
     # return corners
 
 
-DIR = os.path.join("..", "data", "individual_keys")
+# DIR = os.path.join("..", "data", "individual_keys")
 # DIR = os.path.join("..", "data")
-FILES = [f for f in os.listdir(DIR) if f.endswith(".mp4")]
+# FILES = [f for f in os.listdir(DIR) if f.endswith(".mp4")]
 # FILES = FILES[1:]
-show_img = True
-print(FILES)
+# show_img = True
+# print(FILES)
 
-npz_calibration = np.load(os.path.join("..", "data", "calibration", "galaxy_s7-7.mp4.npz"))
+# npz_calibration = np.load(os.path.join("..", "data", "calibration", "galaxy_s7-7.mp4.npz"))
 # npz_calibration = np.load(os.path.join("..", "data", "calibration", "nexus5.mp4.npz"))
-camera_matrix = npz_calibration["camera_matrix"]
-dist_coefs = npz_calibration["dist_coefs"]
+# camera_matrix = npz_calibration["camera_matrix"]
+# dist_coefs = npz_calibration["dist_coefs"]
 
 if __name__ == "__main__":
     for filename in FILES:
