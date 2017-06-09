@@ -56,25 +56,32 @@ class ProximityFilter:
 
 if __name__ == '__main__':
 
-	signal = np.ones((250,2))
-	signal[12,0] = 10
-	signal[45,1] = 10
-	signal[15,1] = 0.5
-	signal[46,0] = 0.2
-	filtered_signal = np.zeros((250,2))
+	# signal = np.ones((250,2))
+	# signal[12,0] = 10
+	# signal[45,1] = 10
+	# signal[15,1] = 0.5
+	# signal[46,0] = 0.2
+	# filtered_signal = np.zeros((250,2))
+	# 
+	raw_signal = np.ones((250, 4, 3))
+	filtered_signal = np.zeros((250, 4, 3))
+	raw_signal[15,1,2] = 2
+	raw_signal[15,3,1] = 2
+	raw_signal[35,0,0] = 2
+	raw_signal[160,1,2] = 2
 
-	fb = ButterworthFilter(signal[0], 0.5, 2)
-	fp = ProximityFilter(signal[0], 1)
+	fb = ButterworthFilter(raw_signal[0], 0.1, 2)
+	fp = ProximityFilter(raw_signal[0], 2)
 
 	for i in range(250):
-		tmp = fp.updateFilter(signal[i])
-		filtered_signal[i] = fb.updateFilter(tmp)
+		# tmp = fp.updateFilter(raw_signal[i])
+		filtered_signal[i] = fb.updateFilter(fp.updateFilter(raw_signal[i]))
 
 	plt.figure(0)
-	plt.plot(signal)
+	plt.plot(raw_signal[:,1])
 	plt.axis([0,250,0,12])
 
 	plt.figure(1)
-	plt.plot(filtered_signal)
+	plt.plot(filtered_signal[:,1])
 	plt.axis([0,250,0,12])
 	plt.show()
