@@ -7,6 +7,7 @@
 import os, time
 import Predictor
 from collections import Counter
+import project_keyboard
 
 def predictFrom2Cameras(counts_left, counts_right):
 
@@ -24,8 +25,17 @@ def predictFrom2Cameras(counts_left, counts_right):
 	new_counts = {k:v for k,v in combined_counts.iteritems() if v > max(threshold,100)}
 
 	to_remove = []
+	for k in counts_left:
+		if (project_keyboard.isInRightHalf(k)) and (k not in counts_right):
+			to_remove.append(k)
+
+	for k in counts_right:
+		if (not project_keyboard.isInRightHalf(k)) and (k not in counts_left):
+			to_remove.append(k)
+
 	for k in to_remove:
-		del new_counts[k]
+		if k in new_counts:
+			del new_counts[k]
 
 	# print "elapsed time in predictFrom2cameras : ", time.time() - start_time
 
@@ -36,6 +46,7 @@ def predictFrom2Cameras(counts_left, counts_right):
 		return []
 
 # remove a key if is is not played for at least 3 frames
+# 
 def postProcessListKeys(list_keys):
 	processed_list = []
 	for i in range(len(list_keys)-2):
@@ -57,8 +68,10 @@ def writeToFile(file, l, pl, vid1, vid2):
 	file.flush()
 
 
-save_file_path = "../data/results/test_scale_1.txt"
+save_file_path = "../data/results/scale3.txt"
 save_file = open(save_file_path, 'w')
+
+# print project_keyboard.isInRightHalf('Bb4')
 
 
 # path to video file
@@ -68,7 +81,7 @@ DIRR = os.path.join("..", "data", "Right_Mikael_camera", "scales")
 # FILESL = [f for f in os.listdir(DIRL) if f.endswith(".mp4")]
 # FILESL = FILESL[1:]
 # FILESL = ['s3t.mp4', 's6t.mp4', 'schromatic1t.mp4', 'schromatic4t.mp4', 'schromatic7t.mp4', 'schromatic5t.mp4']
-FILESL = ['s1t.mp4']
+FILESL = ['s3t.mp4']
 # FILESR = [f for f in os.listdir(DIRR) if f.endswith(".mp4")]
 # FILESR = FILESR[1:]
 # show_img = True
@@ -92,8 +105,8 @@ for i in range(len(FILESL)):
 	print fl
 	print fr
 	print ""
-	pleft = Predictor.Predictor(fl)
-	pright = Predictor.Predictor(fr)
+	pleft = Predictor.Predictor(fl, use_fixed_parameters=True)
+	pright = Predictor.Predictor(fr, use_fixed_parameters=True)
 	list_keys = []
 	while pleft.advanceFrame(filter_corners = False, update_projection=False, project_image=True):
 		pright.advanceFrame(filter_corners = False, update_projection=False, project_image=True)

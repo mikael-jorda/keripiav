@@ -353,6 +353,10 @@ def project_image(img, mask_keyboard, T_img_to_virtual):
 
     return img_virtual
 
+def isInRightHalf(key):
+    i = indexof(key)
+    return (i > NUM_WHITE_KEYS/2 and i < NUM_WHITE_KEYS) or (i > NUM_WHITE_KEYS + NUM_BLACK_KEYS/2)
+
 if __name__ == "__main__":
     # Define four keyboard corners in image: upper left, upper right, bottom right, bottom left
     # points_img = np.array([[35,1581],[721,588],[856,597],[341,1689]])
